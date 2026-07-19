@@ -1,11 +1,14 @@
 package com.fitnesse.app.ai
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 data class GeminiResponse(
@@ -35,15 +38,16 @@ class GeminiService(private val apiKey: String = ApiConfig.GEMINI_API_KEY) {
 
     suspend fun analyzeClothingImage(base64Image: String, mimeType: String): String {
         val prompt = """
-            Analyze this clothing item photo and return JSON:
+            Analyze this clothing item photo and return JSON with EXACTLY these values:
             {
-              "category": "top|bottom|outerwear|footwear|accessory|dress",
-              "subcategory": "t-shirt|jeans|sneakers|etc",
-              "dominantColor": "primary color name",
-              "secondaryColor": "secondary color if patterned",
-              "pattern": "solid|striped|plaid|floral|graphic",
-              "length": "cropped|regular|long|oversized|fitted"
+              "category": "Top|Bottom|Footwear|Outerwear|Accessory|Dress",
+              "subcategory": "e.g., T-shirt, Jeans, Sneakers, Blazer, Necklace",
+              "dominantColor": "exact color name like Navy Blue, Crimson Red, etc.",
+              "secondaryColor": "second color if patterned, otherwise empty",
+              "pattern": "Plain|Striped|Plaid|Floral|Polka Dot|Geometric|Tie-Dye|Solid",
+              "length": "Cropped|Regular|Long|Oversized|Fitted"
             }
+            Use the EXACT values listed after each colon. Do NOT use other variations.
         """.trimIndent()
 
         val jsonBody = buildJsonBody(prompt, base64Image, mimeType)
@@ -69,20 +73,40 @@ class GeminiService(private val apiKey: String = ApiConfig.GEMINI_API_KEY) {
     }
 
     private suspend fun callGemini(jsonBody: String): String {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=$apiKey"
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
         val body = jsonBody.toRequestBody("application/json".toMediaType())
-        val request = Request.Builder().url(url).post(body).build()
+        val request = Request.Builder().url(url)
+            .addHeader("x-goog-api-key", apiKey)
+            .post(body).build()
 
-        return try {
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string() ?: "{}"
-            val geminiResp = gson.fromJson(responseBody, GeminiResponse::class.java)
-            geminiResp.candidates?.firstOrNull()
-                ?.content?.parts?.firstOrNull()
-                ?.text ?: "No response"
-        } catch (e: Exception) {
-            "Error: ${e.message}"
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    Log.e("GeminiService", "HTTP ${response.code}: ${response.message}")
+                    return@withContext "Error: HTTP ${response.code}"
+                }
+                val responseBody = response.body?.string() ?: "{}"
+                val geminiResp = gson.fromJson(responseBody, GeminiResponse::class.java)
+                val text = geminiResp.candidates?.firstOrNull()
+                    ?.content?.parts?.firstOrNull()
+                    ?.text ?: "No response"
+                stripMarkdown(text)
+            } catch (e: Exception) {
+                val detail = "${e::class.simpleName}: ${e.message ?: e.toString()}"
+                Log.e("GeminiService", "callGemini failed: $detail", e)
+                "Error: $detail"
+            }
         }
+    }
+
+    private fun stripMarkdown(text: String): String {
+        return text.trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .trim()
+            .removeSuffix("```")
+            .trim()
     }
 
     private fun buildJsonBody(prompt: String, base64Image: String, mimeType: String): String {
@@ -124,28 +148,3 @@ data class GeminiAnalysisResult(
     }
 }
 
-data class OutfitSelectionResult(
-    val selected: Map<String, String> = emptyMap(),
-    val reasoning: String = "",
-) {
-    companion object {
-        fun fromJson(json: String): OutfitSelectionResult {
-            return try {
-                val obj = Gson().fromJson(json, JsonObject::class.java)
-                val selectedObj = obj.getAsJsonObject("selected")
-                val selected = mapOf(
-                    "top" to (selectedObj?.get("top")?.asString ?: ""),
-                    "bottom" to (selectedObj?.get("bottom")?.asString ?: ""),
-                    "outerwear" to (selectedObj?.get("outerwear")?.asString ?: ""),
-                    "footwear" to (selectedObj?.get("footwear")?.asString ?: ""),
-                )
-                OutfitSelectionResult(
-                    selected = selected,
-                    reasoning = obj.get("reasoning")?.asString ?: "",
-                )
-            } catch (e: Exception) {
-                OutfitSelectionResult()
-            }
-        }
-    }
-}

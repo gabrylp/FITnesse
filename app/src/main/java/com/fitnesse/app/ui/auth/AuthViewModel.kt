@@ -3,6 +3,7 @@ package com.fitnesse.app.ui.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitnesse.app.data.firebase.AuthRepository
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ data class AuthUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val isSuccess: Boolean = false,
+    val resetSent: Boolean = false,
 )
 
 class AuthViewModel(
@@ -24,10 +26,17 @@ class AuthViewModel(
     private val _state = MutableStateFlow(AuthUiState())
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
+    private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+        _state.value = _state.value.copy(isSuccess = auth.currentUser != null)
+    }
+
     init {
-        if (authRepository.isSignedIn()) {
-            _state.value = _state.value.copy(isSuccess = true)
-        }
+        FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
     }
 
     fun updateEmail(email: String) {
@@ -40,6 +49,26 @@ class AuthViewModel(
 
     fun toggleMode() {
         _state.value = _state.value.copy(isLogin = !_state.value.isLogin, error = null)
+    }
+
+    fun sendPasswordReset() {
+        val email = _state.value.email.trim()
+        if (email.isBlank()) {
+            _state.value = _state.value.copy(error = "Enter your email first")
+            return
+        }
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            val result = authRepository.sendPasswordReset(email)
+            result.fold(
+                onSuccess = {
+                    _state.value = _state.value.copy(isLoading = false, resetSent = true, error = null)
+                },
+                onFailure = { e ->
+                    _state.value = _state.value.copy(isLoading = false, error = e.message ?: "Failed to send reset email")
+                },
+            )
+        }
     }
 
     fun submit() {

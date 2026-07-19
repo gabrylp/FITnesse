@@ -6,16 +6,20 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.fitnesse.app.ui.auth.AuthScreen
 import com.fitnesse.app.ui.calendar.CalendarScreen
-import com.fitnesse.app.ui.ootd.OotdScreen
+import com.fitnesse.app.ui.clothes.AddClothesScreen
+import com.fitnesse.app.ui.clothes.ClothingDetailScreen
 import com.fitnesse.app.ui.settings.SettingsScreen
 import com.fitnesse.app.ui.wardrobe.WardrobeScreen
 
 object Routes {
     const val AUTH = "auth"
     const val WARDROBE = "wardrobe"
-    const val OOTD = "ootd"
     const val CALENDAR = "calendar"
     const val SETTINGS = "settings"
+    const val ADD_CLOTHES = "add_clothes"
+    const val CLOTHING_DETAIL = "clothing_detail/{itemId}"
+
+    fun clothingDetail(itemId: String) = "clothing_detail/$itemId"
 }
 
 @Composable
@@ -35,13 +39,11 @@ fun FITnesseNavGraph(navController: NavHostController) {
         }
         composable(Routes.WARDROBE) {
             WardrobeScreen(
-                onOpenOotd = { navController.navigate(Routes.OOTD) },
                 onOpenCalendar = { navController.navigate(Routes.CALENDAR) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onAddClothes = { navController.navigate(Routes.ADD_CLOTHES) },
+                onOpenItemDetail = { itemId -> navController.navigate(Routes.clothingDetail(itemId)) },
             )
-        }
-        composable(Routes.OOTD) {
-            OotdScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.CALENDAR) {
             CalendarScreen(onBack = { navController.popBackStack() })
@@ -54,6 +56,16 @@ fun FITnesseNavGraph(navController: NavHostController) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
+            )
+        }
+        composable(Routes.ADD_CLOTHES) {
+            AddClothesScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.CLOTHING_DETAIL) { backStackEntry ->
+            val itemId = backStackEntry.arguments?.getString("itemId") ?: return@composable
+            ClothingDetailScreen(
+                itemId = itemId,
+                onBack = { navController.popBackStack() },
             )
         }
     }

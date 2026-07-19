@@ -16,16 +16,17 @@ private val LightColorScheme = lightColorScheme(
     secondaryContainer = GoldSecondaryContainer,
     onSecondaryContainer = GoldOnSecondaryContainer,
     background = WarmWhite,
-    surface = WarmWhiteSurface,
-    surfaceVariant = GoldSecondaryContainer,
+    surface = WarmCream,
+    surfaceVariant = WarmCreamVariant,
     onBackground = WoodDark,
     onSurface = WoodDark,
+    onSurfaceVariant = GoldSecondary,
     outline = WoodBrown,
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = GoldOnDark,
-    onPrimary = GoldOnPrimaryContainer,
+    onPrimary = GoldOnDarkContainer,
     primaryContainer = GoldOnDarkContainer,
     onPrimaryContainer = GoldOnDark,
     secondary = GoldSecondary,
@@ -35,8 +36,9 @@ private val DarkColorScheme = darkColorScheme(
     background = DarkBackground,
     surface = DarkSurface,
     surfaceVariant = DarkSurfaceVariant,
-    onBackground = GoldOnDark,
-    onSurface = GoldOnDark,
+    onBackground = DarkOnSurface,
+    onSurface = DarkOnSurface,
+    onSurfaceVariant = DarkOnSurfaceVariant,
     outline = GoldSecondary,
 )
 

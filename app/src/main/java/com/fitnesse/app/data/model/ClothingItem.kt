@@ -15,8 +15,9 @@ data class ClothingItem(
     val dateAdded: Long = System.currentTimeMillis(),
 )
 
-fun ClothingItem.isAvailable(cooldownDays: Int): Boolean {
+fun ClothingItem.isAvailable(settings: UserSettings): Boolean {
     if (lastWorn == 0L) return true
-    val cooldownMs = cooldownDays * 24L * 60 * 60 * 1000
+    if (category.lowercase() !in settings.cooldownCategories.map { it.lowercase() }) return true
+    val cooldownMs = settings.cooldownDays * 24L * 60 * 60 * 1000
     return System.currentTimeMillis() - lastWorn > cooldownMs
 }

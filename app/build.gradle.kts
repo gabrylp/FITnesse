@@ -4,12 +4,12 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
-val localProps = java.util.Properties()
-val localPropsFile = rootProject.file("local.properties")
-if (localPropsFile.exists()) {
-    localPropsFile.inputStream().use { localProps.load(it) }
-}
-val geminiApiKey = localProps.getProperty("gemini.api.key", "")
+val geminiApiKey: String = rootProject.file("local.properties")
+    .takeIf { it.exists() }
+    ?.readLines()
+    ?.firstOrNull { it.startsWith("gemini.api.key=") }
+    ?.substringAfter("gemini.api.key=")
+    ?.trim() ?: ""
 
 android {
     namespace = "com.fitnesse.app"
@@ -52,6 +52,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)

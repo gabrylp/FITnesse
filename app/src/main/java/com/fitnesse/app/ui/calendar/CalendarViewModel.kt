@@ -12,6 +12,9 @@ import kotlinx.coroutines.launch
 data class CalendarUiState(
     val outfits: List<OutfitRecommendation> = emptyList(),
     val isLoading: Boolean = false,
+    val selectedOutfit: OutfitRecommendation? = null,
+    val selectedOutfitItems: List<com.fitnesse.app.data.model.ClothingItem> = emptyList(),
+    val showOutfitDetail: Boolean = false,
 )
 
 class CalendarViewModel(
@@ -34,6 +37,31 @@ class CalendarViewModel(
             } catch (e: Exception) {
                 _state.value = _state.value.copy(isLoading = false)
             }
+        }
+    }
+
+    fun showOutfitDetail(outfit: OutfitRecommendation) {
+        viewModelScope.launch {
+            val items = repository.resolveOutfitItems(outfit.items)
+            _state.value = _state.value.copy(
+                selectedOutfit = outfit,
+                selectedOutfitItems = items,
+                showOutfitDetail = true,
+            )
+        }
+    }
+
+    fun hideOutfitDetail() {
+        _state.value = _state.value.copy(showOutfitDetail = false, selectedOutfit = null, selectedOutfitItems = emptyList())
+    }
+
+    fun deleteOutfit(outfitId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteOutfit(outfitId)
+                hideOutfitDetail()
+                loadHistory()
+            } catch (_: Exception) { }
         }
     }
 }

@@ -5,13 +5,10 @@ import com.fitnesse.app.data.model.OutfitRecommendation
 import com.fitnesse.app.data.model.UserSettings
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.toObject
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
-import java.util.UUID
 
 class FirebaseRepository {
     private val db = FirebaseFirestore.getInstance()
-    private val storage = FirebaseStorage.getInstance()
 
     private val userId: String
         get() = AuthRepository().currentUser?.uid ?: "anonymous"
@@ -34,7 +31,24 @@ class FirebaseRepository {
     }
 
     suspend fun updateClothingItem(item: ClothingItem) {
-        item.id.let { itemsRef().document(it).set(item).await() }
+        itemsRef().document(item.id).set(item).await()
+    }
+
+    suspend fun deleteClothingItem(id: String) {
+        itemsRef().document(id).delete().await()
+    }
+
+    suspend fun getClothingItem(id: String): ClothingItem? {
+        return try {
+            val doc = itemsRef().document(id).get().await()
+            doc.toObject<ClothingItem>()?.copy(id = doc.id)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun deleteOutfit(id: String) {
+        outfitsRef().document(id).delete().await()
     }
 
     suspend fun getTodaysOutfit(date: String): OutfitRecommendation? {
@@ -75,9 +89,4 @@ class FirebaseRepository {
         settingsRef().set(settings).await()
     }
 
-    suspend fun uploadPhoto(byteArray: ByteArray): String {
-        val ref = storage.reference.child("users/$userId/photos/${UUID.randomUUID()}.jpg")
-        ref.putBytes(byteArray).await()
-        return ref.downloadUrl.await().toString()
-    }
 }

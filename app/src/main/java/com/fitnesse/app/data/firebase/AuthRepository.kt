@@ -9,6 +9,8 @@ class AuthRepository {
 
     val currentUser: FirebaseUser? get() = auth.currentUser
 
+    fun getCurrentUserEmail(): String = currentUser?.email ?: ""
+
     suspend fun signUp(email: String, password: String): Result<FirebaseUser> {
         return try {
             val result = auth.createUserWithEmailAndPassword(email, password).await()
@@ -32,4 +34,13 @@ class AuthRepository {
     }
 
     fun isSignedIn(): Boolean = auth.currentUser != null
+
+    suspend fun sendPasswordReset(email: String): Result<Unit> {
+        return try {
+            auth.sendPasswordResetEmail(email).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
