@@ -1,10 +1,13 @@
 package com.fitnesse.app.ui.calendar
 
 import java.util.Calendar
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -27,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.fitnesse.app.data.model.ClothingItem
 import com.fitnesse.app.data.model.OutfitRecommendation
 import com.fitnesse.app.ui.theme.GoldPrimary
@@ -78,7 +83,7 @@ fun CalendarScreen(
                     )
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("\u2190 Close") }
+                    TextButton(onClick = onBack) { Text("Close") }
                 },
             )
         },
@@ -97,9 +102,7 @@ fun CalendarScreen(
                 Spacer(Modifier.height(8.dp))
 
                 WeeklyView(
-                    onDayClick = { dateStr ->
-                        state.outfits.find { it.date == dateStr }?.let { viewModel.showOutfitDetail(it) }
-                    },
+                    onDayClick = { dateStr -> viewModel.onDayClicked(dateStr) },
                     outfits = state.outfits,
                 )
 
@@ -110,7 +113,7 @@ fun CalendarScreen(
                     style = MaterialTheme.typography.titleSmall,
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
-                    color = WoodDark,
+                    color = MaterialTheme.colorScheme.onSurface,
                     letterSpacing = 4.sp,
                     modifier = Modifier.padding(start = 4.dp),
                 )
@@ -121,7 +124,7 @@ fun CalendarScreen(
                         .height(1.dp)
                         .background(
                             Brush.horizontalGradient(
-                                listOf(GoldPrimary.copy(alpha = 0.6f), Color.Transparent)
+                                listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), Color.Transparent)
                             )
                         )
                 )
@@ -141,10 +144,36 @@ fun CalendarScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(state.outfits.reversed()) { outfit ->
-                            OutfitHistoryCard(
-                                outfit = outfit,
-                                onClick = { viewModel.showOutfitDetail(outfit) },
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = {
+                                    if (it == SwipeToDismissBoxValue.EndToStart) {
+                                        viewModel.deleteOutfit(outfit.id)
+                                        true
+                                    } else false
+                                }
                             )
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.error.copy(alpha = 0.8f)),
+                                        contentAlignment = Alignment.CenterEnd,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = MaterialTheme.colorScheme.onError,
+                                            modifier = Modifier.padding(end = 16.dp),
+                                        )
+                                    }
+                                },
+                                enableDismissFromStartToEnd = false,
+                            ) {
+                                OutfitHistoryCard(
+                                    outfit = outfit,
+                                    onClick = { viewModel.showOutfitDetail(outfit) },
+                                )
+                            }
                         }
                     }
                 }
@@ -156,6 +185,7 @@ fun CalendarScreen(
         OutfitDetailDialog(
             outfit = state.selectedOutfit!!,
             items = state.selectedOutfitItems,
+            isPreview = state.isPreview,
             onDismiss = { viewModel.hideOutfitDetail() },
             onDelete = { viewModel.deleteOutfit(state.selectedOutfit!!.id) },
         )
@@ -201,15 +231,15 @@ private fun WeeklyView(
             style = MaterialTheme.typography.headlineSmall,
             fontFamily = FontFamily.Serif,
             fontWeight = FontWeight.Normal,
-            color = WoodDark,
-            letterSpacing = 4.sp,
-            modifier = Modifier.padding(start = 4.dp, bottom = 16.dp),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = 4.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 16.dp),
         )
 
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = WarmCream),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -235,7 +265,7 @@ private fun WeeklyView(
                                     style = MaterialTheme.typography.labelMedium,
                                     fontFamily = FontFamily.Serif,
                                     fontWeight = FontWeight.Bold,
-                                    color = WoodBrown,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f),
                                     textAlign = TextAlign.Center,
                                 )
@@ -282,10 +312,7 @@ private fun WeeklyView(
                                                         1.5.dp, GoldPrimary, RoundedCornerShape(8.dp)
                                                     ) else Modifier
                                                 )
-                                                .then(
-                                                    if (isInWeek) Modifier.clickable { onDayClick(dateStr) }
-                                                    else Modifier
-                                                ),
+                                                .clickable { onDayClick(dateStr) },
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -294,10 +321,10 @@ private fun WeeklyView(
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontFamily = FontFamily.Serif,
                                                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                                                    color = when {
-                                                        isToday -> WoodDark
-                                                        isInWeek -> WoodDark
-                                                        else -> WoodBrown.copy(alpha = 0.35f)
+                                                        color = when {
+                                                        isToday -> MaterialTheme.colorScheme.onSurface
+                                                        isInWeek -> MaterialTheme.colorScheme.onSurface
+                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                                     },
                                                 )
                                                 if (hasOutfit) {
@@ -339,7 +366,7 @@ private fun OutfitHistoryCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = WarmCream,
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -351,14 +378,14 @@ private fun OutfitHistoryCard(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(WoodLight.copy(alpha = 0.3f)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = outfit.date.takeLast(2),
                     style = MaterialTheme.typography.titleMedium,
                     fontFamily = FontFamily.Serif,
-                    color = WoodDark,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
             Spacer(Modifier.width(12.dp))
@@ -367,20 +394,20 @@ private fun OutfitHistoryCard(
                     text = outfit.date,
                     style = MaterialTheme.typography.titleSmall,
                     fontFamily = FontFamily.Serif,
-                    color = WoodDark,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = "${outfit.items.size} items",
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Serif,
-                    color = WoodBrown,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (outfit.reasoning.isNotEmpty()) {
                     Text(
                         text = outfit.reasoning,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Serif,
-                        color = WoodDark.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         maxLines = 1,
                     )
                 }
@@ -390,7 +417,7 @@ private fun OutfitHistoryCard(
                     text = "Worn \u2713",
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Serif,
-                    color = GoldPrimary,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -402,19 +429,20 @@ private fun OutfitHistoryCard(
 private fun OutfitDetailDialog(
     outfit: OutfitRecommendation,
     items: List<ClothingItem>,
+    isPreview: Boolean = false,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Outfit - ${outfit.date}", fontFamily = FontFamily.Serif) },
+        title = { Text("Outfit - ${outfit.date}", fontFamily = FontFamily.Serif, color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Column {
                 Text(
-                    text = if (outfit.confirmedWorn) "Worn \u2713" else "Not yet worn",
+                    text = if (isPreview) "(Preview)" else if (outfit.confirmedWorn) "Worn \u2713" else "Not yet worn",
                     style = MaterialTheme.typography.labelMedium,
                     fontFamily = FontFamily.Serif,
-                    color = if (outfit.confirmedWorn) GoldPrimary else WoodBrown,
+                    color = if (outfit.confirmedWorn || isPreview) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
                 items.forEach { item ->
@@ -439,11 +467,13 @@ private fun OutfitDetailDialog(
                                 )
                             }
                             if (item.photoURL.isNotEmpty()) {
-                                AsyncImage(
-                                    model = item.photoURL,
-                                    contentDescription = item.subcategory,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                            val ctx = androidx.compose.ui.platform.LocalContext.current
+                            AsyncImage(
+                                model = ImageRequest.Builder(ctx).data(item.photoURL).crossfade(true).build(),
+                                contentDescription = item.subcategory,
+                                modifier = Modifier.size(50.dp).clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Fit,
+                            )
                             }
                         }
                         Spacer(Modifier.width(8.dp))
@@ -453,13 +483,13 @@ private fun OutfitDetailDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontFamily = FontFamily.Serif,
                                 fontWeight = FontWeight.Medium,
-                                color = WoodDark,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 text = "${item.dominantColor} \u2022 ${item.pattern}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Serif,
-                                color = WoodBrown,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -471,19 +501,25 @@ private fun OutfitDetailDialog(
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Serif,
                         fontStyle = FontStyle.Italic,
-                        color = WoodDark.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = onDelete,
-                colors = ButtonDefaults.buttonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) { Text("Delete") }
+            if (isPreview) {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            } else {
+                Button(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.buttonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete") }
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            if (!isPreview) {
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
         },
     )
 }

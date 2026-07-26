@@ -11,15 +11,18 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +45,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.fitnesse.app.data.local.PhotoStorage
 import com.fitnesse.app.data.model.ClothingItem
 import com.fitnesse.app.data.model.OutfitRecommendation
 import com.fitnesse.app.data.repository.WardrobeRepository
@@ -125,6 +130,11 @@ private fun ClosetExterior(
     modifier: Modifier = Modifier,
 ) {
     val isDark = MaterialTheme.colorScheme.background == com.fitnesse.app.ui.theme.DarkBackground
+    val repo = remember { WardrobeRepository() }
+    var profilePhotoUrl by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        profilePhotoUrl = repo.getUserSettings().profilePhotoUrl
+    }
 
     Column(
         modifier = modifier
@@ -198,6 +208,31 @@ private fun ClosetExterior(
                 drawHandleBars(size, sx, sy, 183f, 217f, gold)
             }
 
+            if (profilePhotoUrl.isNotEmpty()) {
+                val photoSvgX = 229f
+                val photoSvgY = 272f
+                val photoSvgW = 34f
+                val photoSvgH = 34f
+                AsyncImage(
+                    model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(profilePhotoUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Profile",
+                    modifier = Modifier
+                        .offset(
+                            x = maxWidth * (photoSvgX / svgWidth),
+                            y = maxHeight * (photoSvgY / svgHeight),
+                        )
+                        .size(
+                            width = maxWidth * (photoSvgW / svgWidth),
+                            height = maxHeight * (photoSvgH / svgHeight),
+                        )
+                        .clip(RoundedCornerShape(2.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+
             Box(
                 modifier = Modifier
                     .offset(x = leftDoorX, y = topY)
@@ -247,6 +282,10 @@ private fun ClosetInterior(
     var cooldownDays by remember { mutableStateOf(3) }
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var itemToDelete by remember { mutableStateOf<ClothingItem?>(null) }
+    var isSelecting by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
     fun loadData() {
         scope.launch {
@@ -264,45 +303,93 @@ private fun ClosetInterior(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "My Closet",
-                        fontFamily = FontFamily.Serif,
-                    )
-                },
-                navigationIcon = {
-                    TextButton(onClick = onClose) { Text("\u2190 Close") }
-                },
-            )
+            if (isSelecting) {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            "${selectedIds.size} selected",
+                            fontFamily = FontFamily.Serif,
+                        )
+                    },
+                    navigationIcon = {
+                        TextButton(onClick = {
+                            isSelecting = false
+                            selectedIds = emptySet()
+                        }) { Text("Cancel") }
+                    },
+                )
+            } else {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            "My Closet",
+                            fontFamily = FontFamily.Serif,
+                        )
+                    },
+                    navigationIcon = {
+                        TextButton(onClick = onClose) { Text("Close") }
+                    },
+                )
+            }
         },
         floatingActionButton = {
-            Box {
-                FloatingActionButton(
-                    onClick = { onShowMenuChange(true) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add clothes")
+            if (!isSelecting) {
+                Box {
+                    FloatingActionButton(
+                        onClick = { onShowMenuChange(true) },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add clothes")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { onShowMenuChange(false) },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Add from Gallery") },
+                            onClick = {
+                                onShowMenuChange(false)
+                                onAddClothes()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Add Manually") },
+                            onClick = {
+                                onShowMenuChange(false)
+                                onShowManualDialogChange(true)
+                            },
+                        )
+                    }
                 }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { onShowMenuChange(false) },
+            }
+        },
+        bottomBar = {
+            if (isSelecting && selectedIds.isNotEmpty()) {
+                BottomAppBar(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Add from Gallery") },
+                    TextButton(
                         onClick = {
-                            onShowMenuChange(false)
-                            onAddClothes()
+                            val ids = selectedIds.toList()
+                            val itemsToDelete = items.filter { it.id in ids }
+                            scope.launch {
+                                repository.deleteClothingItems(ids)
+                                itemsToDelete.forEach {
+                                    if (it.photoURL.startsWith("file://")) PhotoStorage.deletePhoto(it.photoURL)
+                                }
+                                isSelecting = false
+                                selectedIds = emptySet()
+                                loadData()
+                                snackbarHostState.showSnackbar("${ids.size} item${if (ids.size != 1) "s" else ""} deleted")
+                            }
                         },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Add Manually") },
-                        onClick = {
-                            onShowMenuChange(false)
-                            onShowManualDialogChange(true)
-                        },
-                    )
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer),
+                    ) {
+                        Text("Delete Selected (${selectedIds.size})", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
@@ -433,12 +520,57 @@ private fun ClosetInterior(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 rowItems.forEach { item ->
-                                    ClothingCard(
-                                        item = item,
-                                        onClick = { onOpenItemDetail(item.id) },
-                                        modifier = Modifier.weight(1f),
-                                        cooldownDays = cooldownDays,
-                                    )
+                                    val isSelected = item.id in selectedIds
+                                    if (isSelecting) {
+                                        ClothingCard(
+                                            item = item,
+                                            modifier = Modifier.weight(1f),
+                                            cooldownDays = cooldownDays,
+                                            isSelecting = true,
+                                            isSelected = isSelected,
+                                            onSelect = {
+                                                selectedIds = if (isSelected) selectedIds - item.id else selectedIds + item.id
+                                            },
+                                        )
+                                    } else {
+                                        val dismissState = rememberSwipeToDismissBoxState(
+                                            confirmValueChange = {
+                                                if (it == SwipeToDismissBoxValue.EndToStart) {
+                                                    itemToDelete = item
+                                                    false
+                                                } else false
+                                            }
+                                        )
+                                        SwipeToDismissBox(
+                                            state = dismissState,
+                                            backgroundContent = {
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(Color.Red.copy(alpha = 0.8f)),
+                                                    contentAlignment = Alignment.CenterEnd,
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Delete,
+                                                        contentDescription = "Delete",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.padding(end = 16.dp),
+                                                    )
+                                                }
+                                            },
+                                            enableDismissFromStartToEnd = false,
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            ClothingCard(
+                                                item = item,
+                                                onClick = { onOpenItemDetail(item.id) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                cooldownDays = cooldownDays,
+                                                onLongPress = {
+                                                    isSelecting = true
+                                                    selectedIds = setOf(item.id)
+                                                },
+                                            )
+                                        }
+                                    }
                                 }
                                 if (rowItems.size < 2) {
                                     Spacer(Modifier.weight(1f))
@@ -452,6 +584,31 @@ private fun ClosetInterior(
         }
     }
 
+    itemToDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = { Text("Delete Item") },
+            text = { Text("Delete ${item.subcategory.ifEmpty { item.category }}? This can't be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            repository.deleteClothingItem(item.id)
+                            if (item.photoURL.startsWith("file://")) PhotoStorage.deletePhoto(item.photoURL)
+                            itemToDelete = null
+                            loadData()
+                            snackbarHostState.showSnackbar("${item.subcategory.ifEmpty { item.category }} deleted")
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
+
     if (showManualDialog) {
         ManualAddDialog(
             onDismiss = { onShowManualDialogChange(false) },
@@ -460,8 +617,18 @@ private fun ClosetInterior(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ClothingCard(item: ClothingItem, onClick: () -> Unit = {}, modifier: Modifier = Modifier, cooldownDays: Int = 3) {
+private fun ClothingCard(
+    item: ClothingItem,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    cooldownDays: Int = 3,
+    isSelecting: Boolean = false,
+    isSelected: Boolean = false,
+    onSelect: () -> Unit = {},
+    onLongPress: () -> Unit = {},
+) {
     val bgColor = parseColor(item.dominantColor)
 
     val cooldownRemaining = if (item.lastWorn > 0L) {
@@ -486,7 +653,19 @@ private fun ClothingCard(item: ClothingItem, onClick: () -> Unit = {}, modifier:
     }
 
     Card(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth().then(
+            if (isSelecting) {
+                Modifier.combinedClickable(
+                    onClick = onSelect,
+                    onLongClick = onSelect,
+                )
+            } else {
+                Modifier.combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongPress,
+                )
+            }
+        ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -509,10 +688,10 @@ private fun ClothingCard(item: ClothingItem, onClick: () -> Unit = {}, modifier:
                 }
                 if (item.photoURL.isNotEmpty()) {
                     AsyncImage(
-                        model = item.photoURL,
+                        model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current).data(item.photoURL).crossfade(true).build(),
                         contentDescription = item.subcategory,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                     )
                 }
                 if (cooldownRemaining > 0) {
@@ -527,6 +706,20 @@ private fun ClothingCard(item: ClothingItem, onClick: () -> Unit = {}, modifier:
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFFFB74D),
                             fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                if (isSelecting) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(4.dp),
+                        contentAlignment = Alignment.TopStart,
+                    ) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { onSelect() },
+                            colors = CheckboxDefaults.colors(uncheckedColor = Color.White),
                         )
                     }
                 }

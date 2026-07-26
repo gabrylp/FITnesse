@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.fitnesse.app.data.model.ClothingItem
 
 @Composable
@@ -127,11 +128,12 @@ fun WardrobeSlot(label: String, height: Dp, item: ClothingItem? = null) {
                         )
                     }
                     if (item.photoURL.isNotEmpty()) {
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
                         AsyncImage(
-                            model = item.photoURL,
+                            model = ImageRequest.Builder(ctx).data(item.photoURL).crossfade(true).build(),
                             contentDescription = item.subcategory,
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop,
+                            contentScale = ContentScale.Fit,
                         )
                     }
                 }

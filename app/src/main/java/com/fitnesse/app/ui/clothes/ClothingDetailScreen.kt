@@ -81,7 +81,7 @@ fun ClothingDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("\u2190 Close") }
+                    TextButton(onClick = onBack) { Text("Close") }
                 },
                 actions = {
                     if (state.item != null && !state.isEditing) {
@@ -109,15 +109,21 @@ fun ClothingDetailScreen(
                     .padding(16.dp),
             ) {
                 if (item.photoURL.isNotEmpty()) {
-                    AsyncImage(
-                        model = item.photoURL,
-                        contentDescription = item.subcategory,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(250.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop,
-                    )
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(parseColor(item.dominantColor)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AsyncImage(
+                            model = item.photoURL,
+                            contentDescription = item.subcategory,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                 }
 
@@ -338,4 +344,25 @@ private fun DetailRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+private fun parseColor(name: String): Color {
+    val map = mapOf(
+        "black" to 0xFF000000, "white" to 0xFFFFFFFF,
+        "red" to 0xFFE53935, "dark red" to 0xFFB71C1C, "light red" to 0xFFFFCDD2,
+        "blue" to 0xFF1E88E5, "dark blue" to 0xFF0D47A1, "light blue" to 0xFFBBDEFB,
+        "green" to 0xFF43A047, "dark green" to 0xFF1B5E20, "light green" to 0xFFC8E6C9,
+        "yellow" to 0xFFFFEB3B, "dark yellow" to 0xFFF9A825, "light yellow" to 0xFFFFF9C4,
+        "orange" to 0xFFFF9800, "dark orange" to 0xFFE65100, "light orange" to 0xFFFFE0B2,
+        "purple" to 0xFF8E24AA, "dark purple" to 0xFF4A148C, "light purple" to 0xFFE1BEE7,
+        "pink" to 0xFFEC407A, "dark pink" to 0xFF880E4F, "light pink" to 0xFFF8BBD0,
+        "brown" to 0xFF6D4C41, "dark brown" to 0xFF3E2723, "light brown" to 0xFFD7CCC8,
+        "gray" to 0xFF757575, "dark gray" to 0xFF424242, "light gray" to 0xFFBDBDBD,
+        "grey" to 0xFF757575, "dark grey" to 0xFF424242, "light grey" to 0xFFBDBDBD,
+        "navy" to 0xFF1A237E, "navy blue" to 0xFF1A237E,
+        "teal" to 0xFF00897B, "cyan" to 0xFF00ACC1,
+        "coral" to 0xFFFF7043, "beige" to 0xFFF5F5DC, "cream" to 0xFFFFFDD0, "maroon" to 0xFF800000,
+        "gold" to 0xFFFFD700, "silver" to 0xFFC0C0C0, "olive" to 0xFF808000,
+    )
+    return Color(map[name.lowercase()] ?: 0xFFBDBDBD)
 }

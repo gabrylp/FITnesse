@@ -1,8 +1,13 @@
 package com.fitnesse.app.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -10,11 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +33,18 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        uri?.let {
+            val inputStream = context.contentResolver.openInputStream(it)
+            val bytes = inputStream?.readBytes() ?: return@let
+            inputStream.close()
+            viewModel.updateProfilePhoto(bytes)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -35,7 +56,7 @@ fun SettingsScreen(
                     )
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("\u2190 Close") }
+                    TextButton(onClick = onBack) { Text("Close") }
                 },
             )
         },
@@ -56,7 +77,11 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            ProfileCard(email = if (state.isSignedIn) state.email else "Not signed in")
+            ProfileCard(
+                email = if (state.isSignedIn) state.email else "Not signed in",
+                photoUrl = state.settings.profilePhotoUrl,
+                onPickPhoto = { photoPickerLauncher.launch("image/*") },
+            )
 
             Spacer(Modifier.height(20.dp))
 
@@ -110,7 +135,11 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun ProfileCard(email: String) {
+private fun ProfileCard(
+    email: String,
+    photoUrl: String,
+    onPickPhoto: () -> Unit,
+) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -122,15 +151,29 @@ private fun ProfileCard(email: String) {
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                    .clickable { onPickPhoto() },
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                if (photoUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(photoUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Profile photo",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
                     Text(
-                        text = "\uD83D\uDC64",
+                        text = email.firstOrNull()?.uppercase() ?: "\uD83D\uDC64",
                         fontSize = 24.sp,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
             }
@@ -142,7 +185,6 @@ private fun ProfileCard(email: String) {
                     fontFamily = FontFamily.Serif,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-
             }
         }
     }
@@ -177,32 +219,45 @@ private fun LaundryCooldownToggle(state: SettingsUiState, viewModel: SettingsVie
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CooldownSlider(state: SettingsUiState, viewModel: SettingsViewModel) {
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 text = "Cooldown Duration",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = "${state.settings.cooldownDays} days",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         Slider(
             value = state.settings.cooldownDays.toFloat(),
             onValueChange = { viewModel.setCooldownDays(it.toInt()) },
             valueRange = 3f..7f,
             steps = 3,
             modifier = Modifier.fillMaxWidth(),
+            track = { sliderState ->
+                SliderDefaults.Track(
+                    sliderState = sliderState,
+                    modifier = Modifier.height(6.dp),
+                )
+            },
+            thumb = {
+                SliderDefaults.Thumb(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    modifier = Modifier.size(16.dp),
+                )
+            },
         )
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -2,6 +2,7 @@ package com.fitnesse.app.ui.calendar
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fitnesse.app.data.model.ClothingItem
 import com.fitnesse.app.data.model.OutfitRecommendation
 import com.fitnesse.app.data.repository.WardrobeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,8 +14,9 @@ data class CalendarUiState(
     val outfits: List<OutfitRecommendation> = emptyList(),
     val isLoading: Boolean = false,
     val selectedOutfit: OutfitRecommendation? = null,
-    val selectedOutfitItems: List<com.fitnesse.app.data.model.ClothingItem> = emptyList(),
+    val selectedOutfitItems: List<ClothingItem> = emptyList(),
     val showOutfitDetail: Boolean = false,
+    val isPreview: Boolean = false,
 )
 
 class CalendarViewModel(
@@ -40,6 +42,32 @@ class CalendarViewModel(
         }
     }
 
+    fun onDayClicked(dateStr: String) {
+        viewModelScope.launch {
+            val saved = _state.value.outfits.find { it.date == dateStr }
+            if (saved != null) {
+                val items = repository.resolveOutfitItems(saved.items)
+                _state.value = _state.value.copy(
+                    selectedOutfit = saved,
+                    selectedOutfitItems = items,
+                    showOutfitDetail = true,
+                    isPreview = false,
+                )
+            } else {
+                val preview = repository.generateOutfitPreview(dateStr)
+                if (preview != null) {
+                    val items = repository.resolveOutfitItems(preview.items)
+                    _state.value = _state.value.copy(
+                        selectedOutfit = preview,
+                        selectedOutfitItems = items,
+                        showOutfitDetail = true,
+                        isPreview = true,
+                    )
+                }
+            }
+        }
+    }
+
     fun showOutfitDetail(outfit: OutfitRecommendation) {
         viewModelScope.launch {
             val items = repository.resolveOutfitItems(outfit.items)
@@ -47,12 +75,13 @@ class CalendarViewModel(
                 selectedOutfit = outfit,
                 selectedOutfitItems = items,
                 showOutfitDetail = true,
+                isPreview = false,
             )
         }
     }
 
     fun hideOutfitDetail() {
-        _state.value = _state.value.copy(showOutfitDetail = false, selectedOutfit = null, selectedOutfitItems = emptyList())
+        _state.value = _state.value.copy(showOutfitDetail = false, selectedOutfit = null, selectedOutfitItems = emptyList(), isPreview = false)
     }
 
     fun deleteOutfit(outfitId: String) {

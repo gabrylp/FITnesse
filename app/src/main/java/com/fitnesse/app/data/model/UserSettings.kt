@@ -5,4 +5,5 @@ data class UserSettings(
     val cooldownDays: Int = 3,
     val cooldownCategories: List<String> = listOf("top", "bottom", "outerwear"),
     val theme: String = "system",
+    val profilePhotoUrl: String = "",
 )

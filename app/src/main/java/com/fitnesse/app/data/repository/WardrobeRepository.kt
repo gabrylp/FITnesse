@@ -13,6 +13,7 @@ import com.fitnesse.app.data.model.UserSettings
 import com.fitnesse.app.ai.GeminiService
 import com.fitnesse.app.ai.GeminiAnalysisResult
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -32,6 +33,10 @@ class WardrobeRepository(
     suspend fun updateClothingItem(item: ClothingItem) = firebaseRepo.updateClothingItem(item)
 
     suspend fun deleteClothingItem(id: String) = firebaseRepo.deleteClothingItem(id)
+
+    suspend fun deleteClothingItems(ids: List<String>) {
+        ids.forEach { firebaseRepo.deleteClothingItem(it) }
+    }
 
     suspend fun deleteOutfit(id: String) = firebaseRepo.deleteOutfit(id)
 
@@ -59,11 +64,14 @@ class WardrobeRepository(
         }
     }
 
-    private suspend fun generateOutfit(available: List<ClothingItem>, today: String): OutfitRecommendation? {
+    private suspend fun buildOutfit(available: List<ClothingItem>): OutfitRecommendation? {
         if (available.isEmpty()) return null
 
         val algorithmic = selectBestOutfit(available)
         val algoItems = listOfNotNull(algorithmic.top, algorithmic.bottom, algorithmic.outerwear, algorithmic.footwear, algorithmic.accessory)
+
+        var itemIds = algoItems.map { it.id }
+        var reasoning = algorithmic.reasoning
 
         if (geminiService != null && algoItems.isNotEmpty()) {
             val context = buildOutfitContext(available)
@@ -73,24 +81,29 @@ class WardrobeRepository(
             if (geminiIds.isNotEmpty()) {
                 val resolved = geminiIds.mapNotNull { id -> available.find { it.id == id } }
                 if (resolved.isNotEmpty()) {
-                    val outfit = OutfitRecommendation(
-                        date = today,
-                        items = resolved.map { it.id },
-                        reasoning = selection.reasoning.ifEmpty { algorithmic.reasoning },
-                    )
-                    firebaseRepo.saveOutfit(outfit)
-                    return outfit
+                    itemIds = resolved.map { it.id }
+                    reasoning = selection.reasoning.ifEmpty { algorithmic.reasoning }
                 }
             }
         }
 
-        val outfit = OutfitRecommendation(
-            date = today,
-            items = algoItems.map { it.id },
-            reasoning = algorithmic.reasoning,
+        return OutfitRecommendation(
+            items = itemIds,
+            reasoning = reasoning,
         )
+    }
+
+    private suspend fun generateOutfit(available: List<ClothingItem>, today: String): OutfitRecommendation? {
+        val outfit = buildOutfit(available)?.copy(date = today) ?: return null
         firebaseRepo.saveOutfit(outfit)
         return outfit
+    }
+
+    suspend fun generateOutfitPreview(dateStr: String): OutfitRecommendation? {
+        val settings = firebaseRepo.getUserSettings()
+        val allItems = firebaseRepo.getClothingItems()
+        val available = filterAvailable(allItems, settings)
+        return buildOutfit(available)?.copy(date = dateStr)
     }
 
     suspend fun getTodaysOutfit(): OutfitRecommendation? {
@@ -105,10 +118,13 @@ class WardrobeRepository(
     }
 
     suspend fun regenerateOutfit(): OutfitRecommendation? {
+        val today = dateFormat.format(Date())
+        val existing = firebaseRepo.getTodaysOutfit(today)
+        if (existing != null) firebaseRepo.deleteOutfit(existing.id)
         val settings = firebaseRepo.getUserSettings()
         val allItems = firebaseRepo.getClothingItems()
         val available = filterAvailable(allItems, settings)
-        return generateOutfit(available, dateFormat.format(Date()))
+        return generateOutfit(available, today)
     }
 
     suspend fun confirmWorn(outfitId: String, itemIds: List<String>) {
@@ -126,7 +142,13 @@ class WardrobeRepository(
         }
     }
 
-    suspend fun getOutfitHistory(): List<OutfitRecommendation> = firebaseRepo.getOutfitHistory()
+    suspend fun getOutfitHistory(): List<OutfitRecommendation> {
+        val all = firebaseRepo.getOutfitHistory()
+        val cutoff = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.time
+        val cutoffDate = dateFormat.format(cutoff)
+        all.filter { it.date < cutoffDate }.forEach { firebaseRepo.deleteOutfit(it.id) }
+        return all.filter { it.date >= cutoffDate }
+    }
 
     suspend fun getUserSettings(): UserSettings = firebaseRepo.getUserSettings()
 

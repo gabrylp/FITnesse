@@ -2,6 +2,7 @@ package com.fitnesse.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fitnesse.app.data.local.PhotoStorage
 import com.fitnesse.app.data.model.UserSettings
 import com.fitnesse.app.data.repository.WardrobeRepository
 import com.fitnesse.app.ui.theme.ThemeManager
@@ -91,5 +92,16 @@ class SettingsViewModel(
     fun signOut() {
         repository.signOut()
         _state.value = _state.value.copy(isSignedIn = false)
+    }
+
+    fun updateProfilePhoto(bytes: ByteArray) {
+        viewModelScope.launch {
+            val oldUrl = _state.value.settings.profilePhotoUrl
+            if (oldUrl.isNotEmpty()) PhotoStorage.deletePhoto(oldUrl)
+            val newUrl = PhotoStorage.savePhoto(bytes)
+            val updated = _state.value.settings.copy(profilePhotoUrl = newUrl)
+            _state.value = _state.value.copy(settings = updated)
+            repository.saveUserSettings(updated)
+        }
     }
 }

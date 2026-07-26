@@ -153,6 +153,34 @@ private fun isComplementary(a: String, b: String): Boolean {
     return complementaryPairs.contains(baseA to baseB)
 }
 
+private val colorFamilies = mapOf(
+    "red" to setOf("red", "light red", "dark red", "maroon", "pink", "light pink", "dark pink", "coral"),
+    "orange" to setOf("orange", "light orange", "dark orange"),
+    "yellow" to setOf("yellow", "light yellow", "dark yellow", "beige", "cream"),
+    "green" to setOf("green", "light green", "dark green", "olive", "teal"),
+    "blue" to setOf("blue", "light blue", "dark blue", "navy"),
+    "purple" to setOf("purple", "light purple", "dark purple"),
+    "brown" to setOf("brown", "light brown", "dark brown"),
+    "gray" to setOf("gray", "grey", "light gray", "light grey", "dark gray", "dark grey"),
+    "black" to setOf("black"),
+    "white" to setOf("white"),
+)
+
+private fun colorFamily(name: String): String? {
+    return colorFamilies.entries.firstOrNull { name.lowercase().trim() in it.value }?.key
+}
+
+private val saturatedColors = setOf(
+    "red", "dark red", "light red", "pink", "dark pink", "light pink",
+    "orange", "dark orange", "light orange", "yellow", "dark yellow", "light yellow",
+    "green", "dark green", "light green", "blue", "dark blue", "light blue",
+    "purple", "dark purple", "light purple", "navy", "maroon", "olive", "teal", "coral",
+)
+
+private fun isSaturated(name: String): Boolean {
+    return name.lowercase().trim() in saturatedColors
+}
+
 private fun scoreOutfit(top: ClothingItem?, bottom: ClothingItem?, outerwear: ClothingItem?, footwear: ClothingItem?, accessory: ClothingItem?): Int {
     var score = 0
     val layers = listOfNotNull(top, outerwear, bottom, footwear).map { it.dominantColor }
@@ -191,6 +219,18 @@ private fun scoreOutfit(top: ClothingItem?, bottom: ClothingItem?, outerwear: Cl
         }
     }
 
+    val nonNullColors = allItems.map { it.dominantColor }
+    val families = nonNullColors.mapNotNull { colorFamily(it) }
+    if (families.size >= 3 && families.distinct().size == 1) score += 3
+
+    for (i in 0 until nonNullColors.size - 1) {
+        val a = nonNullColors[i]
+        val b = nonNullColors[i + 1]
+        if (isSaturated(a) && isSaturated(b) && !isComplementary(a, b)) score += 2
+    }
+
+    score += kotlin.random.Random.nextInt(0, 5)
+
     return score
 }
 
@@ -222,6 +262,20 @@ private fun buildReasons(top: ClothingItem?, bottom: ClothingItem?, outerwear: C
 
     if (allItems.size >= 3) parts.add("Rule of thirds: layered silhouette creates visual balance.")
 
+    val nonNullColors = allItems.map { it.dominantColor }
+    val families = nonNullColors.mapNotNull { colorFamily(it) }
+    if (families.size >= 3 && families.distinct().size == 1) {
+        parts.add("Monochromatic palette: tuned to ${families.first()} tones.")
+    }
+
+    var blockingPairs = 0
+    for (i in 0 until nonNullColors.size - 1) {
+        if (isSaturated(nonNullColors[i]) && isSaturated(nonNullColors[i + 1]) && !isComplementary(nonNullColors[i], nonNullColors[i + 1])) {
+            blockingPairs++
+        }
+    }
+    if (blockingPairs > 0) parts.add("Color blocking: bold saturated contrast for visual impact.")
+
     if (parts.isEmpty()) parts.add("Selected based on availability and category variety.")
 
     return parts.joinToString(" ")
@@ -246,7 +300,7 @@ fun buildOutfitContext(available: List<ClothingItem>): String {
         if (dresses.isNotEmpty()) {
             appendLine("Available dresses: ${dresses.joinToString { format(it) }}")
         }
-        appendLine("Styling rules: sandwich method (light/dark/light), color theory, rule of thirds.")
+        appendLine("Styling rules: sandwich method (light/dark/light), color theory, rule of thirds, monochromatic palette, color blocking.")
         appendLine("Return a JSON object with key 'selected' mapping each category to the item's id string (the part before the colon), and key 'reasoning' with your explanation.")
         appendLine("Pick one complete outfit and explain why.")
     }
